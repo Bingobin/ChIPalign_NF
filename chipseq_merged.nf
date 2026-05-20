@@ -20,18 +20,6 @@ params.balance_bam = false
 params.balance_pairs = 10000000
 params.run_motif = true
 
-log.info """\
-    ChIPalign_NF
-    ============
-    Sample Info   : ${params.input}
-    Out Dir       : ${params.outdir}
-    Reference     : ${params.ref}
-    Genome        : ${params.genome}
-    balance_bam   : ${params.balance_bam}
-    balance_pairs : ${params.balance_pairs}
-    run_motif     : ${params.run_motif}
-    """.stripIndent(true)
-
 def normValue(v) {
     def s = v == null ? '' : v.toString().trim()
     return (s in ['', 'NA', 'na', 'null', 'NULL', 'None']) ? '' : s
@@ -304,10 +292,22 @@ workflow PEAK_CALLING {
 }
 
 workflow {
+    log.info """\
+        ChIPalign_NF
+        ============
+        Sample Info   : ${params.input}
+        Out Dir       : ${params.outdir}
+        Reference     : ${params.ref}
+        Genome        : ${params.genome}
+        balance_bam   : ${params.balance_bam}
+        balance_pairs : ${params.balance_pairs}
+        run_motif     : ${params.run_motif}
+        """.stripIndent(true)
+
     def input_file = file(params.input)
     def sep_char = input_file.name.toLowerCase().endsWith('.csv') ? ',' : '\t'
 
-    Channel
+    channel
         .fromPath(params.input)
         .splitCsv(header: true, sep: sep_char)
         .map { row ->
@@ -356,9 +356,9 @@ workflow {
 
     PEAK_CALLING(ch_peak_with_ctrl, ch_peak_no_ctrl)
 
-    MultiQC(ch_aligned_bam.map { true }.first())
-}
+    MultiQC(ch_aligned_bam.map { ignored -> true }.first())
 
-workflow.onComplete {
-    log.info(workflow.success ? "\nDone! See results --> $params.outdir\n" : "Oops.. something went wrong")
+    workflow.onComplete = {
+        log.info(workflow.success ? "\nDone! See results --> $params.outdir\n" : "Oops.. something went wrong")
+    }
 }

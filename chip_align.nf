@@ -6,14 +6,6 @@ params.outdir = "results/ChIPalign_NF"
 params.project = "ChIPalign_NF"
 params.ref = "/lustre/home/acct-medkkw/medlyb/database/annotation/gatk_ann/hg38/bowtie2index2/Homo_sapiens_assembly38.fasta"
 
-log.info """\
-    ChIPalign_NF Align
-    ==================
-    Sample Info : ${params.input}
-    Out Dir     : ${params.outdir}
-    """
-    .stripIndent(true)
-
 process FASTQC {
     tag "fastqc in $ID"
     publishDir "$params.outdir/fastqc", pattern: "*.{html,zip}", mode: 'copy'
@@ -145,13 +137,21 @@ process MultiQC {
 }
 
 workflow {
+    log.info """\
+        ChIPalign_NF Align
+        ==================
+        Sample Info : ${params.input}
+        Out Dir     : ${params.outdir}
+        """
+        .stripIndent(true)
+
     def input_file = file(params.input)
     def sep_char = input_file.name.toLowerCase().endsWith('.csv') ? ',' : '\t'
 
-    Channel.fromPath(params.input)
-    .splitCsv(header:true,sep: sep_char)
-    .map { ["${it.ID}","${it.R1}","${it.R2}", "${it.Type}"] }
-    .set{ch_sample}
+    channel.fromPath(params.input)
+    .splitCsv(header: true, sep: sep_char)
+    .map { row -> ["${row.ID}","${row.R1}","${row.R2}", "${row.Type}"] }
+    .set { ch_sample }
     //ch_sample.view()
     FASTQC(ch_sample)
     ch_qc = FastpFilter(ch_sample)

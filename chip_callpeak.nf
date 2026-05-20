@@ -8,16 +8,6 @@ params.balance_bam = false
 params.balance_pairs = 10000000
 
 
-log.info """\
-    ChIPalign_NF Peak Calling
-    =========================
-    Sample Info   : ${params.input}
-    Out Dir       : ${params.outdir}
-    balance_bam   : ${params.balance_bam}
-    balance_pairs : ${params.balance_pairs}
-    """
-    .stripIndent(true)
-
 process BamPairBalancer {
     tag "BamPairBalancer in $ID"
     publishDir "$params.outdir/bam", pattern: "${ID}*", mode: 'copy'
@@ -132,9 +122,18 @@ process HOMER_chipTag {
 }
 
 workflow {
+    log.info """\
+        ChIPalign_NF Peak Calling
+        =========================
+        Sample Info   : ${params.input}
+        Out Dir       : ${params.outdir}
+        balance_bam   : ${params.balance_bam}
+        balance_pairs : ${params.balance_pairs}
+        """
+        .stripIndent(true)
 
-    Channel.fromPath(params.input)
-        .splitCsv(header:true, sep:',')
+    channel.fromPath(params.input)
+        .splitCsv(header: true, sep: ',')
         .map { row ->
             def ctrl = (row.BAM_c && row.BAM_c != 'NA' && row.BAM_c != 'null' && row.BAM_c != '') ? file(row.BAM_c) : []
             tuple(row.ID, file(row.BAM_t), ctrl, row.Type)
@@ -158,8 +157,8 @@ workflow {
     // HOMER_findMotifs(ch_callpeak.summits)
     // HOMER_chipTag(ch_for_macs2)
 
-}
+    workflow.onComplete = {
+        log.info(workflow.success ? "\nDone! See results --> $params.outdir\n" : "Oops.. someting went wrong")
+    }
 
-workflow.onComplete {
-    log.info ( workflow.success ? "\nDone! See results --> $params.outdir\n" : "Oops.. someting went wrong" )
 }
