@@ -30,9 +30,18 @@ The pipeline is designed for two common ChIP-seq scenarios:
 
 ## Input Samplesheet
 
-The merged pipeline expects a CSV or TSV samplesheet with the following columns:
+The merged pipeline supports two input modes:
+
+- `--input_mode fastq`: start from FASTQ files and run QC, alignment, duplicate removal, bigWig generation, and peak calling
+- `--input_mode bam`: start from existing BAM files and run peak calling, peak annotation, motif analysis, and MultiQC
+
+FASTQ mode samplesheet columns:
 
 `ID,R1,R2,Layout,PeakMode,ControlID,ControlBam`
+
+BAM mode samplesheet columns:
+
+`ID,BAM,PeakMode,ControlID,ControlBam`
 
 Column definitions:
 
@@ -40,11 +49,12 @@ Column definitions:
 - `R1`: read 1 FASTQ path
 - `R2`: read 2 FASTQ path; leave blank for single-end data
 - `Layout`: `PE` or `SE`
+- `BAM`: treatment/input BAM path for BAM input mode
 - `PeakMode`: `TF`, `Histone`, or `NoCtr`
 - `ControlID`: matched input/control sample ID; leave blank for `NoCtr` or control-only rows
 - `ControlBam`: matched input/control BAM path; used when `ControlID` is blank
 
-Example:
+FASTQ mode example:
 
 ```csv
 ID,R1,R2,Layout,PeakMode,ControlID,ControlBam
@@ -55,9 +65,21 @@ CTCF_2,/path/to/CTCF_2_R1.fastq.gz,/path/to/CTCF_2_R2.fastq.gz,PE,TF,,/path/to/I
 CUTRUN_1,/path/to/CUTRUN_1_R1.fastq.gz,/path/to/CUTRUN_1_R2.fastq.gz,PE,NoCtr,,
 ```
 
-Reference file in this repository:
+BAM mode example:
+
+```csv
+ID,BAM,PeakMode,ControlID,ControlBam
+Input_1,/path/to/Input_1.rmdup.bam,,,
+CTCF_1,/path/to/CTCF_1.rmdup.bam,TF,Input_1,
+H3K27ac_1,/path/to/H3K27ac_1.rmdup.bam,Histone,Input_1,
+CTCF_2,/path/to/CTCF_2.rmdup.bam,TF,,/path/to/Input_2.rmdup.bam
+CUTRUN_1,/path/to/CUTRUN_1.rmdup.bam,NoCtr,,
+```
+
+Reference files in this repository:
 
 - [samplesheet.chipseq.csv](assets/samplesheet.chipseq.csv)
+- [samplesheet.chipseq.bam.csv](assets/samplesheet.chipseq.bam.csv)
 
 ## Important Metadata Rules
 
@@ -98,6 +120,15 @@ nextflow run chipseq_merged.nf \
   --outdir results
 ```
 
+Start directly from BAM files:
+
+```bash
+nextflow run chipseq_merged.nf \
+  --input_mode bam \
+  --input assets/samplesheet.chipseq.bam.csv \
+  --outdir results
+```
+
 Run with motif analysis disabled:
 
 ```bash
@@ -127,9 +158,10 @@ nextflow run chipseq_merged.nf \
 
 ## Main Parameters
 
-Key parameters currently exposed in [chipseq_merged.nf](chipseq_merged.nf):
+Default parameter values are defined in [nextflow.config](nextflow.config). They can still be overridden on the command line:
 
 - `--input`: input samplesheet path
+- `--input_mode`: input mode, `fastq` or `bam`, default `fastq`
 - `--outdir`: output directory, default `results`
 - `--project`: project name used in report naming
 - `--ref`: Bowtie2 reference index prefix
@@ -137,7 +169,15 @@ Key parameters currently exposed in [chipseq_merged.nf](chipseq_merged.nf):
 - `--effective_genome_size`: genome size for RPGC normalization
 - `--balance_bam`: whether to run BAM balancing before peak calling
 - `--balance_pairs`: number of read pairs for BAM balancing
-- `--run_motif`: whether to run HOMER motif discovery
+- `--run_motif`: whether to run HOMER motif discovery, default `false`
+- `--macs2_tf_qvalue`: MACS2 `-q` value for TF mode, default `0.01`
+- `--macs2_histone_pvalue`: MACS2 `-p` value for Histone mode, default `1e-9`
+- `--macs2_noctrl_qvalue`: MACS2 `-q` value for NoCtr mode, default `0.01`
+- `--macs2_noctrl_keep_dup`: MACS2 `--keep-dup` value for NoCtr mode, default `1`
+- `--macs2_noctrl_extsize`: MACS2 `--extsize` value for NoCtr mode, default `250`
+- `--motif_size`: HOMER `findMotifsGenome.pl -size` value, default `200`
+- `--motif_len`: HOMER `findMotifsGenome.pl -len` value, default `6,8,12,16,20`
+- `--motif_mknown`: HOMER `findMotifsGenome.pl -mknown` motif database path
 
 Default process resources are currently defined in [nextflow.config](nextflow.config):
 
@@ -167,9 +207,9 @@ Main output subdirectories:
 
 The pipeline currently uses two peak-calling branches:
 
-- `PeakMode = TF`: `macs2 callpeak -q 0.01` with matched control
-- `PeakMode = Histone`: `macs2 callpeak -p 1e-9` with matched control
-- `PeakMode = NoCtr`: control-free MACS2 mode with `--SPMR --keep-dup 1 --extsize=250 --nomodel -g hs`
+- `PeakMode = TF`: `macs2 callpeak -q`, controlled by `--macs2_tf_qvalue`, default `0.01`
+- `PeakMode = Histone`: `macs2 callpeak -p`, controlled by `--macs2_histone_pvalue`, default `1e-9`
+- `PeakMode = NoCtr`: control-free MACS2 mode with `--SPMR`, `--nomodel`, and configurable `--macs2_noctrl_qvalue`, `--macs2_noctrl_keep_dup`, and `--macs2_noctrl_extsize`
 
 This means your samplesheet drives downstream behavior directly. If the metadata are wrong, peak calling will also be wrong.
 
@@ -177,7 +217,7 @@ This means your samplesheet drives downstream behavior directly. If the metadata
 
 - `--ref` is passed to `bowtie2 -x`, so it should be a Bowtie2 index prefix, not a raw FASTA file path.
 - The current MACS2 outputs are defined as `narrowPeak` and `summits.bed` for all modes. That may not be ideal for broad histone marks if you later switch to a true broad peak strategy.
-- The motif database path in `HOMER_findMotifs` is currently hard-coded in the pipeline.
+- The motif database path can be changed with `--motif_mknown`.
 - The BAM balancer script path is currently hard-coded as `BamPairBalancer/bam_pair_balancer.py`.
 - The pipeline has not yet been packaged with profiles such as `standard`, `slurm`, `docker`, or `conda`.
 - The current environment in this session does not have `nextflow` installed, so this repository update was done by static inspection rather than an actual pipeline run.
@@ -189,11 +229,4 @@ This means your samplesheet drives downstream behavior directly. If the metadata
 - [chip_callpeak.nf](chip_callpeak.nf): original peak-calling workflow
 - [nextflow.config](nextflow.config): default process settings and Nextflow manifest
 - [samplesheet.chipseq.csv](assets/samplesheet.chipseq.csv): example samplesheet
-
-## Suggested Next Improvements
-
-- add `profiles` for local and cluster execution
-- add Conda or container support
-- move hard-coded database paths into parameters
-- split the merged pipeline into `main.nf`, `modules/`, and `subworkflows/`
-- add a real test dataset and a minimal smoke test
+- [samplesheet.chipseq.bam.csv](assets/samplesheet.chipseq.bam.csv): example BAM-mode samplesheet

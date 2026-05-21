@@ -1,0 +1,6 @@
+ID,BAM,PeakMode,ControlID,ControlBam
+Input_1,/path/to/Input_1.rmdup.bam,,,
+CTCF_1,/path/to/CTCF_1.rmdup.bam,TF,Input_1,
+H3K27ac_1,/path/to/H3K27ac_1.rmdup.bam,Histone,Input_1,
+CTCF_2,/path/to/CTCF_2.rmdup.bam,TF,,/path/to/Input_2.rmdup.bam
+CUTRUN_1,/path/to/CUTRUN_1.rmdup.bam,NoCtr,,

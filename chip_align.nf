@@ -32,7 +32,7 @@ process FASTQC {
 
 process FastpFilter {
     tag "fastp QC in $ID"
-    publishDir "$params.outdir/clean", pattern: "${ID}.*.{html,json}", mode: 'copy'
+    publishDir "$params.outdir/clean", pattern: "*.{html,json}", mode: 'copy'
 
     input:
     tuple val(ID), val(R1), val(R2), val(Type)
@@ -54,7 +54,7 @@ process FastpFilter {
 
 process FASTQ_ALIGN {
     tag "bowtie2_align in $ID"
-    publishDir "$params.outdir/align", pattern: "${ID}.bowtie2.out", mode: 'copy'
+    publishDir "$params.outdir/align", pattern: "*.bowtie2.out", mode: 'copy'
 
     input:
     tuple val(ID), path(READ), val(Type)
@@ -79,7 +79,7 @@ process FASTQ_ALIGN {
 
 process PICARD_RMDUP{
     tag "picard rmdup in $ID"
-    publishDir "$params.outdir/bam", pattern: "${ID}*", mode: 'copy'
+    publishDir "$params.outdir/bam", pattern: "*", mode: 'copy'
 
     input:
     tuple val(ID), val(Type), path(BAM), path(BAI)
@@ -97,7 +97,7 @@ process PICARD_RMDUP{
 
 process BAM_TO_BIGWIG{
     tag "bamCoverage in $ID"
-    publishDir "$params.outdir/bigwig", pattern: "${ID}*", mode: 'copy'
+    publishDir "$params.outdir/bigwig", pattern: "*.bw", mode: 'copy'
 
     input:
     tuple val(ID), val(Type), path(BAM), path(BAI)

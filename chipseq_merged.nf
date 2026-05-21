@@ -2,24 +2,16 @@
 nextflow.enable.dsl=2
 
 /*
-Required samplesheet columns:
-ID,R1,R2,Layout,PeakMode,ControlID,ControlBam
+Required samplesheet columns depend on --input_mode:
 
+- For --input_mode fastq: ID,R1,R2,Layout,PeakMode,ControlID,ControlBam
+- For --input_mode bam: ID,BAM,PeakMode,ControlID,ControlBam
 - Layout: PE or SE
+- BAM: treatment/input BAM path for BAM input mode
 - PeakMode: TF / Histone / NoCtr
 - ControlID: matched input sample ID; leave blank for NoCtr or control-only rows
 - ControlBam: matched input/control BAM path; used when ControlID is blank
 */
-
-params.input = "$projectDir/assets/samplesheet.chipseq.csv"
-params.outdir = "results"
-params.project = "ChIPalign_NF"
-params.ref = "/lustre/home/acct-medkkw/medlyb/database/annotation/gatk_ann/hg38/bowtie2index2/Homo_sapiens_assembly38.fasta"
-params.genome = "hg38"
-params.effective_genome_size = 2913022398
-params.balance_bam = false
-params.balance_pairs = 10000000
-params.run_motif = true
 
 def normValue(v) {
     def s = v == null ? '' : v.toString().trim()
@@ -52,7 +44,7 @@ process FASTQC {
 
 process FastpFilter {
     tag "fastp QC in $ID"
-    publishDir "$params.outdir/clean", pattern: "${ID}.*.{html,json}", mode: 'copy'
+    publishDir "$params.outdir/clean", pattern: "*.{html,json}", mode: 'copy'
 
     input:
     tuple val(ID), val(R1), val(R2), val(LAYOUT)
@@ -74,7 +66,7 @@ process FastpFilter {
 
 process FASTQ_ALIGN {
     tag "bowtie2_align in $ID"
-    publishDir "$params.outdir/align", pattern: "${ID}.bowtie2.out", mode: 'copy'
+    publishDir "$params.outdir/align", pattern: "*.bowtie2.out", mode: 'copy'
 
     input:
     tuple val(ID), path(READ), val(LAYOUT)
@@ -102,7 +94,7 @@ process FASTQ_ALIGN {
 
 process PICARD_RMDUP {
     tag "picard rmdup in $ID"
-    publishDir "$params.outdir/bam", pattern: "${ID}*", mode: 'copy'
+    publishDir "$params.outdir/bam", pattern: "*", mode: 'copy'
 
     input:
     tuple val(ID), val(LAYOUT), path(BAM), path(BAI)
@@ -120,7 +112,7 @@ process PICARD_RMDUP {
 
 process BAM_TO_BIGWIG {
     tag "bamCoverage in $ID"
-    publishDir "$params.outdir/bigwig", pattern: "${ID}*", mode: 'copy'
+    publishDir "$params.outdir/bigwig", pattern: "*.bw", mode: 'copy'
 
     input:
     tuple val(ID), val(LAYOUT), path(BAM), path(BAI)
@@ -141,7 +133,7 @@ process BAM_TO_BIGWIG {
 
 process BamPairBalancerWithCtrl {
     tag "BamPairBalancer in $ID"
-    publishDir "$params.outdir/bam_balance", pattern: "${ID}*", mode: 'copy'
+    publishDir "$params.outdir/bam_balance", pattern: "*", mode: 'copy'
 
     input:
     tuple val(ID), path(BAM_t), path(BAM_c), val(PEAK_MODE)
@@ -163,7 +155,8 @@ process BamPairBalancerWithCtrl {
 
 process MACS2_callpeaks_withCtrl {
     tag "macs2 callpeaks in $ID"
-    publishDir "$params.outdir/callpeaks", pattern: "${ID}*", mode: 'copy'
+    cpus 2
+    publishDir "$params.outdir/callpeaks", pattern: "*", mode: 'copy'
 
     input:
     tuple val(ID), path(BAM_t), path(BAM_c), val(PEAK_MODE)
@@ -176,17 +169,18 @@ process MACS2_callpeaks_withCtrl {
     script:
     if ( PEAK_MODE == "Histone" )
         """
-        macs2 callpeak -t $BAM_t -c $BAM_c -f BAMPE -n ${ID} -p 1e-9
+        macs2 callpeak -t $BAM_t -c $BAM_c -f BAMPE -n ${ID} -p ${params.macs2_histone_pvalue}
         """
     else
         """
-        macs2 callpeak -t $BAM_t -c $BAM_c -f BAMPE -n ${ID} -q 0.01
+        macs2 callpeak -t $BAM_t -c $BAM_c -f BAMPE -n ${ID} -q ${params.macs2_tf_qvalue}
         """
 }
 
 process MACS2_callpeaks_noCtrl {
     tag "macs2 callpeaks in $ID"
-    publishDir "$params.outdir/callpeaks", pattern: "${ID}*", mode: 'copy'
+    cpus 2
+    publishDir "$params.outdir/callpeaks", pattern: "*", mode: 'copy'
 
     input:
     tuple val(ID), path(BAM_t), val(PEAK_MODE)
@@ -198,13 +192,14 @@ process MACS2_callpeaks_noCtrl {
 
     script:
     """
-    macs2 callpeak -t $BAM_t -f BAMPE -n ${ID} --SPMR -q 0.01 --keep-dup 1 --extsize=250 --nomodel -g hs
+    macs2 callpeak -t $BAM_t -f BAMPE -n ${ID} --SPMR -q ${params.macs2_noctrl_qvalue} --keep-dup ${params.macs2_noctrl_keep_dup} --extsize=${params.macs2_noctrl_extsize} --nomodel -g hs
     """
 }
 
 process HOMER_annotatePeaks {
     tag "homer annotatePeaks in $ID"
-    publishDir "$params.outdir/annoPeaks", pattern: "${ID}_peaks.narrowPeak.anno.*", mode: 'copy'
+    cpus 2
+    publishDir "$params.outdir/annoPeaks", pattern: "*.anno.*", mode: 'copy'
 
     input:
     tuple val(ID), path(PEAK)
@@ -220,7 +215,7 @@ process HOMER_annotatePeaks {
 
 process HOMER_findMotifs {
     tag "homer findMotifs in $ID"
-    publishDir "$params.outdir/motif", pattern: "${ID}.MotifOutput_j", mode: 'copy'
+    publishDir "$params.outdir/motif", pattern: "*.MotifOutput_j", mode: 'copy'
 
     input:
     tuple val(ID), path(SUMMIT)
@@ -230,12 +225,13 @@ process HOMER_findMotifs {
 
     script:
     """
-    findMotifsGenome.pl ${SUMMIT} ${params.genome} ${ID}.MotifOutput_j -size 200 -mask -p $task.cpus -len 6,8,12,16,20 -mknown /lustre/home/acct-medkkw/medlyb/wl_proj/WL234_Lib/database/JASPAR/JASPAR2020_CORE_vertebrates_non-redundant_pfms_homer.txt
+    findMotifsGenome.pl ${SUMMIT} ${params.genome} ${ID}.MotifOutput_j -size ${params.motif_size} -mask -p $task.cpus -len ${params.motif_len} -mknown ${params.motif_mknown}
     """
 }
 
 process MultiQC {
     tag "MultiQC"
+    cpus 2
     publishDir "$params.outdir/reports", pattern: "*", mode: 'copy'
 
     input:
@@ -290,10 +286,19 @@ workflow PEAK_CALLING {
 }
 
 workflow {
+    def input_file = file(params.input)
+    def sep_char = input_file.name.toLowerCase().endsWith('.csv') ? ',' : '\t'
+    def input_mode = normValue(params.input_mode).toLowerCase()
+
+    if ( !(input_mode in ['fastq', 'bam']) ) {
+        error "Invalid --input_mode '${params.input_mode}'. Use 'fastq' or 'bam'."
+    }
+
     log.info """\
         ChIPalign_NF
         ============
         Sample Info   : ${params.input}
+        Input Mode    : ${input_mode}
         Out Dir       : ${params.outdir}
         Reference     : ${params.ref}
         Genome        : ${params.genome}
@@ -301,9 +306,6 @@ workflow {
         balance_pairs : ${params.balance_pairs}
         run_motif     : ${params.run_motif}
         """.stripIndent(true)
-
-    def input_file = file(params.input)
-    def sep_char = input_file.name.toLowerCase().endsWith('.csv') ? ',' : '\t'
 
     channel
         .fromPath(params.input)
@@ -313,33 +315,45 @@ workflow {
             def r1 = normValue(row.R1)
             def r2 = normValue(row.R2)
             def layout = normValue(row.Layout ?: row.TYPE ?: row.Type).toUpperCase()
+            def bam = normValue(row.BAM ?: row.Bam ?: row.bam)
             def peakMode = normValue(row.PeakMode)
             def controlId = normValue(row.ControlID)
             def controlBam = normValue(row.ControlBam)
-            tuple(id, r1, r2, layout, peakMode, controlId, controlBam)
+            tuple(id, r1, r2, layout, bam, peakMode, controlId, controlBam)
         }
         .set { ch_sheet }
 
-    ch_align_input = ch_sheet.map { id, r1, r2, layout, peakMode, controlId, controlBam ->
-        tuple(id, r1, r2, layout)
-    }
-
     ch_peak_meta = ch_sheet
-        .filter { id, r1, r2, layout, peakMode, controlId, controlBam -> peakMode }
-        .map { id, r1, r2, layout, peakMode, controlId, controlBam ->
+        .filter { id, r1, r2, layout, bam, peakMode, controlId, controlBam -> peakMode }
+        .map { id, r1, r2, layout, bam, peakMode, controlId, controlBam ->
             tuple(id, peakMode, controlId, controlBam)
         }
 
-    ch_aligned_bam = ALIGNMENT(ch_align_input).bam
+    def ch_bam_for_peak
+
+    if ( input_mode == 'fastq' ) {
+        ch_align_input = ch_sheet.map { id, r1, r2, layout, bam, peakMode, controlId, controlBam ->
+            tuple(id, r1, r2, layout)
+        }
+
+        ch_aligned_bam = ALIGNMENT(ch_align_input).bam
+
+        ch_bam_for_peak = ch_aligned_bam
+            .map { id, layout, bam, bai -> tuple(id, bam) }
+    } else {
+        ch_bam_for_peak = ch_sheet
+            .map { id, r1, r2, layout, bam, peakMode, controlId, controlBam ->
+                tuple(id, file(bam))
+            }
+    }
 
     ch_treat_with_meta = ch_peak_meta
-        .join(ch_aligned_bam.map { id, layout, bam, bai -> tuple(id, bam) }, by: 0)
+        .join(ch_bam_for_peak, by: 0)
         .map { id, peakMode, controlId, controlBam, bam ->
             tuple(id, bam, peakMode, controlId, controlBam)
         }
 
-    ch_control_bam = ch_aligned_bam
-        .map { id, layout, bam, bai -> tuple(id, bam) }
+    ch_control_bam = ch_bam_for_peak
 
     ch_peak_no_ctrl = ch_treat_with_meta
         .filter { id, bam, peakMode, controlId, controlBam -> peakMode == 'NoCtr' || (!controlId && !controlBam) }
@@ -361,9 +375,9 @@ workflow {
 
     ch_peak_with_ctrl = ch_peak_with_ctrl_by_id.mix(ch_peak_with_ctrl_by_bam)
 
-    PEAK_CALLING(ch_peak_with_ctrl, ch_peak_no_ctrl)
+    ch_peaks = PEAK_CALLING(ch_peak_with_ctrl, ch_peak_no_ctrl).peaks
 
-    MultiQC(ch_aligned_bam.map { ignored -> true }.first())
+    MultiQC(ch_peaks.map { ignored -> true }.first())
 
     workflow.onComplete = {
         log.info(workflow.success ? "\nDone! See results --> $params.outdir\n" : "Oops.. something went wrong")

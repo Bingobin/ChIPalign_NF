@@ -10,7 +10,7 @@ params.balance_pairs = 10000000
 
 process BamPairBalancer {
     tag "BamPairBalancer in $ID"
-    publishDir "$params.outdir/bam", pattern: "${ID}*", mode: 'copy'
+    publishDir "$params.outdir/bam", pattern: "*", mode: 'copy'
 
     input:
     tuple val(ID), path(BAM_t), path(BAM_c), val(Type)
@@ -46,7 +46,7 @@ process BamPairBalancer {
 
 process MACS2_callpeaks {
     tag "macs2 callpeaks in $ID"
-    publishDir "$params.outdir/callpeaks", pattern: "${ID}*", mode: 'copy'
+    publishDir "$params.outdir/callpeaks", pattern: "*", mode: 'copy'
 
     input:
     tuple val(ID), path(BAM_t), path(BAM_c), val(Type)
@@ -75,7 +75,7 @@ process MACS2_callpeaks {
 
 process HOMER_annotatePeaks {
     tag "homer annotatePeaks in $ID"
-    publishDir "$params.outdir/annoPeaks", pattern: "${ID}_peaks.narrowPeak.anno.*", mode: 'copy'
+    publishDir "$params.outdir/annoPeaks", pattern: "*.anno.*", mode: 'copy'
 
     input:
     tuple val(ID), path(PEAK)
@@ -91,7 +91,7 @@ process HOMER_annotatePeaks {
 
 process HOMER_findMotifs {
     tag "homer findMotifs in $ID"
-    publishDir "$params.outdir/motif", pattern: "${ID}.MotifOutput_j", mode: 'copy'
+    publishDir "$params.outdir/motif", pattern: "*.MotifOutput_j", mode: 'copy'
 
     input:
     tuple val(ID), path(SUMMIT)
@@ -107,7 +107,7 @@ process HOMER_findMotifs {
 
 process HOMER_chipTag {
     tag "homer makeTagDirectory in $ID"
-    publishDir "$params.outdir/chipTag", pattern: "${ID}_tag", mode: 'copy'
+    publishDir "$params.outdir/chipTag", pattern: "*_tag", mode: 'copy'
 
     input:
     tuple val(ID), path(BAM_t), path(BAM_c), val(Type)
