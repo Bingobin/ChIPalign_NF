@@ -273,8 +273,12 @@ workflow PEAK_CALLING {
     ch_callpeak_with_ctrl = MACS2_callpeaks_withCtrl(ch_with_ctrl_for_macs2)
     ch_callpeak_no_ctrl = MACS2_callpeaks_noCtrl(ch_peak_no_ctrl)
 
-    ch_peak_files = ch_callpeak_with_ctrl.peaks.mix(ch_callpeak_no_ctrl.peaks)
-    ch_summit_files = ch_callpeak_with_ctrl.summits.mix(ch_callpeak_no_ctrl.summits)
+    ch_peak_files = channel.empty()
+        .mix(ch_callpeak_with_ctrl.peaks)
+        .mix(ch_callpeak_no_ctrl.peaks)
+    ch_summit_files = channel.empty()
+        .mix(ch_callpeak_with_ctrl.summits)
+        .mix(ch_callpeak_no_ctrl.summits)
 
     HOMER_annotatePeaks(ch_peak_files)
     if ( params.run_motif ) {
@@ -377,7 +381,7 @@ workflow {
 
     ch_peaks = PEAK_CALLING(ch_peak_with_ctrl, ch_peak_no_ctrl).peaks
 
-    MultiQC(ch_peaks.map { ignored -> true }.first())
+    MultiQC(ch_peaks.collect().map { ignored -> true })
 
     workflow.onComplete = {
         log.info(workflow.success ? "\nDone! See results --> $params.outdir\n" : "Oops.. something went wrong")
