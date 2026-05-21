@@ -3,15 +3,16 @@ nextflow.enable.dsl=2
 
 /*
 Required samplesheet columns:
-ID,R1,R2,Layout,PeakMode,ControlID
+ID,R1,R2,Layout,PeakMode,ControlID,ControlBam
 
 - Layout: PE or SE
 - PeakMode: TF / Histone / NoCtr
 - ControlID: matched input sample ID; leave blank for NoCtr or control-only rows
+- ControlBam: matched input/control BAM path; used when ControlID is blank
 */
 
 params.input = "$projectDir/assets/samplesheet.chipseq.csv"
-params.outdir = "results/ChIPalign_NF"
+params.outdir = "results"
 params.project = "ChIPalign_NF"
 params.ref = "/lustre/home/acct-medkkw/medlyb/database/annotation/gatk_ann/hg38/bowtie2index2/Homo_sapiens_assembly38.fasta"
 params.genome = "hg38"
@@ -245,10 +246,7 @@ process MultiQC {
 
     script:
     """
-    multiqc -n ${params.project}.fastqc.reports ${workflow.launchDir}/${params.outdir}/fastqc/* -f
-    multiqc -n ${params.project}.clean.reports ${workflow.launchDir}/${params.outdir}/clean/* -f
-    multiqc -n ${params.project}.align.reports ${workflow.launchDir}/${params.outdir}/align/* -f
-    multiqc -n ${params.project}.rmdup.reports ${workflow.launchDir}/${params.outdir}/bam/* -f
+    multiqc -n ${params.project}.reports ${workflow.launchDir}/${params.outdir} -f
     """
 }
 
@@ -317,42 +315,51 @@ workflow {
             def layout = normValue(row.Layout ?: row.TYPE ?: row.Type).toUpperCase()
             def peakMode = normValue(row.PeakMode)
             def controlId = normValue(row.ControlID)
-            tuple(id, r1, r2, layout, peakMode, controlId)
+            def controlBam = normValue(row.ControlBam)
+            tuple(id, r1, r2, layout, peakMode, controlId, controlBam)
         }
         .set { ch_sheet }
 
-    ch_align_input = ch_sheet.map { id, r1, r2, layout, peakMode, controlId ->
+    ch_align_input = ch_sheet.map { id, r1, r2, layout, peakMode, controlId, controlBam ->
         tuple(id, r1, r2, layout)
     }
 
     ch_peak_meta = ch_sheet
-        .filter { id, r1, r2, layout, peakMode, controlId -> peakMode }
-        .map { id, r1, r2, layout, peakMode, controlId ->
-            tuple(id, peakMode, controlId)
+        .filter { id, r1, r2, layout, peakMode, controlId, controlBam -> peakMode }
+        .map { id, r1, r2, layout, peakMode, controlId, controlBam ->
+            tuple(id, peakMode, controlId, controlBam)
         }
 
     ch_aligned_bam = ALIGNMENT(ch_align_input).bam
 
     ch_treat_with_meta = ch_peak_meta
         .join(ch_aligned_bam.map { id, layout, bam, bai -> tuple(id, bam) }, by: 0)
-        .map { id, peakMode, controlId, bam ->
-            tuple(id, bam, peakMode, controlId)
+        .map { id, peakMode, controlId, controlBam, bam ->
+            tuple(id, bam, peakMode, controlId, controlBam)
         }
 
     ch_control_bam = ch_aligned_bam
         .map { id, layout, bam, bai -> tuple(id, bam) }
 
     ch_peak_no_ctrl = ch_treat_with_meta
-        .filter { id, bam, peakMode, controlId -> !controlId || peakMode == 'NoCtr' }
-        .map { id, bam, peakMode, controlId -> tuple(id, bam, peakMode ?: 'NoCtr') }
+        .filter { id, bam, peakMode, controlId, controlBam -> peakMode == 'NoCtr' || (!controlId && !controlBam) }
+        .map { id, bam, peakMode, controlId, controlBam -> tuple(id, bam, peakMode ?: 'NoCtr') }
 
-    ch_peak_with_ctrl = ch_treat_with_meta
-        .filter { id, bam, peakMode, controlId -> controlId && peakMode != 'NoCtr' }
+    ch_peak_with_ctrl_by_id = ch_treat_with_meta
+        .filter { id, bam, peakMode, controlId, controlBam -> controlId && peakMode != 'NoCtr' }
         .combine(ch_control_bam)
-        .filter { id, bam_t, peakMode, controlId, ctrlId, bam_c -> controlId == ctrlId }
-        .map { id, bam_t, peakMode, controlId, ctrlId, bam_c ->
+        .filter { id, bam_t, peakMode, controlId, controlBam, ctrlId, bam_c -> controlId == ctrlId }
+        .map { id, bam_t, peakMode, controlId, controlBam, ctrlId, bam_c ->
             tuple(id, bam_t, bam_c, peakMode)
         }
+
+    ch_peak_with_ctrl_by_bam = ch_treat_with_meta
+        .filter { id, bam, peakMode, controlId, controlBam -> !controlId && controlBam && peakMode != 'NoCtr' }
+        .map { id, bam, peakMode, controlId, controlBam ->
+            tuple(id, bam, file(controlBam), peakMode)
+        }
+
+    ch_peak_with_ctrl = ch_peak_with_ctrl_by_id.mix(ch_peak_with_ctrl_by_bam)
 
     PEAK_CALLING(ch_peak_with_ctrl, ch_peak_no_ctrl)
 

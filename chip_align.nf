@@ -2,7 +2,7 @@
 nextflow.enable.dsl=2
 
 params.input = "$projectDir/assets/samplesheet.raw_fq.csv"
-params.outdir = "results/ChIPalign_NF"
+params.outdir = "results"
 params.project = "ChIPalign_NF"
 params.ref = "/lustre/home/acct-medkkw/medlyb/database/annotation/gatk_ann/hg38/bowtie2index2/Homo_sapiens_assembly38.fasta"
 
@@ -128,10 +128,7 @@ process MultiQC {
 
     script:
     """
-    multiqc -n ${params.project}.fastqc.reports ${workflow.launchDir}/${params.outdir}/fastqc/* -f
-    multiqc -n ${params.project}.clean.reports ${workflow.launchDir}/${params.outdir}/clean/* -f
-    multiqc -n ${params.project}.align.reports ${workflow.launchDir}/${params.outdir}/align/* -f
-    multiqc -n ${params.project}.rmdup.reports ${workflow.launchDir}/${params.outdir}/bam/* -f
+    multiqc -n ${params.project}.reports ${workflow.launchDir}/${params.outdir} -f
     """
 
 }

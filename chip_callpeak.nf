@@ -3,7 +3,7 @@
 nextflow.enable.dsl=2
 
 params.input = "$projectDir/assets/samplesheet.bam.csv"
-params.outdir = "results/ChIPalign_NF"
+params.outdir = "results"
 params.balance_bam = false
 params.balance_pairs = 10000000
 

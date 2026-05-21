@@ -2,10 +2,10 @@
 
 ChIPalign_NF is an end-to-end ChIP-seq Nextflow pipeline for read QC, alignment, duplicate removal, bigWig generation, peak calling, peak annotation, and motif analysis.
 
-The current main entry point is [chipseq_merged.nf](/Users/liuyabin/Desktop/ChIPalign_NF/chipseq_merged.nf). It combines the two original sub-pipelines:
+The current main entry point is [chipseq_merged.nf](chipseq_merged.nf). It combines the two original sub-pipelines:
 
-- [chip_align.nf](/Users/liuyabin/Desktop/ChIPalign_NF/chip_align.nf): FASTQ to BAM and bigWig
-- [chip_callpeak.nf](/Users/liuyabin/Desktop/ChIPalign_NF/chip_callpeak.nf): BAM to peak calling and motif analysis
+- [chip_align.nf](chip_align.nf): FASTQ to BAM and bigWig
+- [chip_callpeak.nf](chip_callpeak.nf): BAM to peak calling and motif analysis
 
 ## Workflow Overview
 
@@ -32,7 +32,7 @@ The pipeline is designed for two common ChIP-seq scenarios:
 
 The merged pipeline expects a CSV or TSV samplesheet with the following columns:
 
-`ID,R1,R2,Layout,PeakMode,ControlID`
+`ID,R1,R2,Layout,PeakMode,ControlID,ControlBam`
 
 Column definitions:
 
@@ -42,20 +42,22 @@ Column definitions:
 - `Layout`: `PE` or `SE`
 - `PeakMode`: `TF`, `Histone`, or `NoCtr`
 - `ControlID`: matched input/control sample ID; leave blank for `NoCtr` or control-only rows
+- `ControlBam`: matched input/control BAM path; used when `ControlID` is blank
 
 Example:
 
 ```csv
-ID,R1,R2,Layout,PeakMode,ControlID
-Input_1,/path/to/Input_1_R1.fastq.gz,/path/to/Input_1_R2.fastq.gz,PE,,
-CTCF_1,/path/to/CTCF_1_R1.fastq.gz,/path/to/CTCF_1_R2.fastq.gz,PE,TF,Input_1
-H3K27ac_1,/path/to/H3K27ac_1_R1.fastq.gz,/path/to/H3K27ac_1_R2.fastq.gz,PE,Histone,Input_1
-CUTRUN_1,/path/to/CUTRUN_1_R1.fastq.gz,/path/to/CUTRUN_1_R2.fastq.gz,PE,NoCtr,
+ID,R1,R2,Layout,PeakMode,ControlID,ControlBam
+Input_1,/path/to/Input_1_R1.fastq.gz,/path/to/Input_1_R2.fastq.gz,PE,,,
+CTCF_1,/path/to/CTCF_1_R1.fastq.gz,/path/to/CTCF_1_R2.fastq.gz,PE,TF,Input_1,
+H3K27ac_1,/path/to/H3K27ac_1_R1.fastq.gz,/path/to/H3K27ac_1_R2.fastq.gz,PE,Histone,Input_1,
+CTCF_2,/path/to/CTCF_2_R1.fastq.gz,/path/to/CTCF_2_R2.fastq.gz,PE,TF,,/path/to/Input_2.rmdup.bam
+CUTRUN_1,/path/to/CUTRUN_1_R1.fastq.gz,/path/to/CUTRUN_1_R2.fastq.gz,PE,NoCtr,,
 ```
 
 Reference file in this repository:
 
-- [samplesheet.chipseq.csv](/Users/liuyabin/Desktop/ChIPalign_NF/assets/samplesheet.chipseq.csv)
+- [samplesheet.chipseq.csv](assets/samplesheet.chipseq.csv)
 
 ## Important Metadata Rules
 
@@ -64,7 +66,8 @@ Reference file in this repository:
 - `PeakMode` only describes the peak-calling strategy.
 - Samples used only as controls can keep `PeakMode` and `ControlID` empty.
 - If a treatment sample uses a control, `ControlID` must exactly match the control sample `ID`.
-- For `NoCtr`, leave `ControlID` empty.
+- If the control BAM already exists, leave `ControlID` empty and set `ControlBam`.
+- For `NoCtr`, leave both `ControlID` and `ControlBam` empty.
 
 ## Requirements
 
@@ -92,7 +95,7 @@ Basic run:
 ```bash
 nextflow run chipseq_merged.nf \
   --input assets/samplesheet.chipseq.csv \
-  --outdir results/ChIPalign_NF
+  --outdir results
 ```
 
 Run with motif analysis disabled:
@@ -124,10 +127,10 @@ nextflow run chipseq_merged.nf \
 
 ## Main Parameters
 
-Key parameters currently exposed in [chipseq_merged.nf](/Users/liuyabin/Desktop/ChIPalign_NF/chipseq_merged.nf):
+Key parameters currently exposed in [chipseq_merged.nf](chipseq_merged.nf):
 
 - `--input`: input samplesheet path
-- `--outdir`: output directory, default `results/ChIPalign_NF`
+- `--outdir`: output directory, default `results`
 - `--project`: project name used in report naming
 - `--ref`: Bowtie2 reference index prefix
 - `--genome`: genome label for HOMER, default `hg38`
@@ -136,7 +139,7 @@ Key parameters currently exposed in [chipseq_merged.nf](/Users/liuyabin/Desktop/
 - `--balance_pairs`: number of read pairs for BAM balancing
 - `--run_motif`: whether to run HOMER motif discovery
 
-Default process resources are currently defined in [nextflow.config](/Users/liuyabin/Desktop/ChIPalign_NF/nextflow.config):
+Default process resources are currently defined in [nextflow.config](nextflow.config):
 
 - `cpus = 4`
 - `memory = 4 GB x cpus`
@@ -145,7 +148,7 @@ Default process resources are currently defined in [nextflow.config](/Users/liuy
 
 By default, results are written to:
 
-`results/ChIPalign_NF`
+`results`
 
 Main output subdirectories:
 
@@ -181,11 +184,11 @@ This means your samplesheet drives downstream behavior directly. If the metadata
 
 ## Repository Files
 
-- [chipseq_merged.nf](/Users/liuyabin/Desktop/ChIPalign_NF/chipseq_merged.nf): main merged pipeline
-- [chip_align.nf](/Users/liuyabin/Desktop/ChIPalign_NF/chip_align.nf): original alignment-only workflow
-- [chip_callpeak.nf](/Users/liuyabin/Desktop/ChIPalign_NF/chip_callpeak.nf): original peak-calling workflow
-- [nextflow.config](/Users/liuyabin/Desktop/ChIPalign_NF/nextflow.config): default process settings and Nextflow manifest
-- [samplesheet.chipseq.csv](/Users/liuyabin/Desktop/ChIPalign_NF/assets/samplesheet.chipseq.csv): example samplesheet
+- [chipseq_merged.nf](chipseq_merged.nf): main merged pipeline
+- [chip_align.nf](chip_align.nf): original alignment-only workflow
+- [chip_callpeak.nf](chip_callpeak.nf): original peak-calling workflow
+- [nextflow.config](nextflow.config): default process settings and Nextflow manifest
+- [samplesheet.chipseq.csv](assets/samplesheet.chipseq.csv): example samplesheet
 
 ## Suggested Next Improvements
 

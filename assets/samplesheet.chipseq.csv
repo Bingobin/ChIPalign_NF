@@ -1,5 +1,6 @@
-ID,R1,R2,Layout,PeakMode,ControlID
-Input_1,/path/to/Input_1_R1.fastq.gz,/path/to/Input_1_R2.fastq.gz,PE,,
-CTCF_1,/path/to/CTCF_1_R1.fastq.gz,/path/to/CTCF_1_R2.fastq.gz,PE,TF,Input_1
-H3K27ac_1,/path/to/H3K27ac_1_R1.fastq.gz,/path/to/H3K27ac_1_R2.fastq.gz,PE,Histone,Input_1
-CUTRUN_1,/path/to/CUTRUN_1_R1.fastq.gz,/path/to/CUTRUN_1_R2.fastq.gz,PE,NoCtr,
+ID,R1,R2,Layout,PeakMode,ControlID,ControlBam
+Input_1,/path/to/Input_1_R1.fastq.gz,/path/to/Input_1_R2.fastq.gz,PE,,,
+CTCF_1,/path/to/CTCF_1_R1.fastq.gz,/path/to/CTCF_1_R2.fastq.gz,PE,TF,Input_1,
+H3K27ac_1,/path/to/H3K27ac_1_R1.fastq.gz,/path/to/H3K27ac_1_R2.fastq.gz,PE,Histone,Input_1,
+CTCF_2,/path/to/CTCF_2_R1.fastq.gz,/path/to/CTCF_2_R2.fastq.gz,PE,TF,,/path/to/Input_2.rmdup.bam
+CUTRUN_1,/path/to/CUTRUN_1_R1.fastq.gz,/path/to/CUTRUN_1_R2.fastq.gz,PE,NoCtr,,
