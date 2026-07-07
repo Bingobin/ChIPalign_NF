@@ -50,7 +50,7 @@ Column definitions:
 - `R2`: read 2 FASTQ path; leave blank for single-end data
 - `Layout`: `PE` or `SE`
 - `BAM`: treatment/input BAM path for BAM input mode
-- `PeakMode`: `TF`, `Histone`, or `NoCtr`
+- `PeakMode`: `TF`, `Histone`, `NoCtr`, or blank for control-only samples
 - `ControlID`: matched input/control sample ID; leave blank for `NoCtr` or control-only rows
 - `ControlBam`: matched input/control BAM path; used when `ControlID` is blank
 
@@ -86,7 +86,7 @@ Reference files in this repository:
 - `Layout` and `PeakMode` are different concepts and should not be merged into one column.
 - `Layout` only describes read structure: `SE` or `PE`.
 - `PeakMode` only describes the peak-calling strategy.
-- Samples used only as controls can keep `PeakMode` and `ControlID` empty.
+- Samples used only as controls should keep `PeakMode` empty. A blank `PeakMode` means the row is not a treatment sample and will be excluded from downstream peak calling.
 - If a treatment sample uses a control, `ControlID` must exactly match the control sample `ID`.
 - If the control BAM already exists, leave `ControlID` empty and set `ControlBam`.
 - For `NoCtr`, leave both `ControlID` and `ControlBam` empty.
