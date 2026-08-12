@@ -5,7 +5,7 @@ nextflow.enable.dsl=2
 Required samplesheet columns depend on --input_mode:
 
 - For --input_mode fastq: ID,R1,R2,Layout,PeakMode,ControlID,ControlBam
-- For --input_mode bam: ID,BAM,PeakMode,ControlID,ControlBam
+- For --input_mode bam: ID,BAM,Layout,PeakMode,ControlID,ControlBam
 - Layout: PE or SE
 - BAM: treatment/input BAM path for BAM input mode
 - PeakMode: TF / Histone / NoCtr
@@ -136,10 +136,10 @@ process BamPairBalancerWithCtrl {
     publishDir "$params.outdir/bam_balance", pattern: "*", mode: 'copy'
 
     input:
-    tuple val(ID), path(BAM_t), path(BAM_c), val(PEAK_MODE)
+    tuple val(ID), path(BAM_t), path(BAM_c), val(LAYOUT), val(PEAK_MODE)
 
     output:
-    tuple val(ID), path("${ID}.treat.bal.sort.bam"), path("${ID}.ctrl.bal.sort.bam"), val(PEAK_MODE)
+    tuple val(ID), path("${ID}.treat.bal.sort.bam"), path("${ID}.ctrl.bal.sort.bam"), val(LAYOUT), val(PEAK_MODE)
 
     script:
     """
@@ -159,7 +159,7 @@ process MACS2_callpeaks_withCtrl {
     publishDir "$params.outdir/callpeaks", pattern: "*", mode: 'copy'
 
     input:
-    tuple val(ID), path(BAM_t), path(BAM_c), val(PEAK_MODE)
+    tuple val(ID), path(BAM_t), path(BAM_c), val(LAYOUT), val(PEAK_MODE)
 
     output:
     tuple val(ID), path("${ID}_peaks.xls"), emit: xls
@@ -167,13 +167,14 @@ process MACS2_callpeaks_withCtrl {
     tuple val(ID), path("${ID}_summits.bed"), emit: summits
 
     script:
+    def bamFormat = LAYOUT == 'PE' ? 'BAMPE' : 'BAM'
     if ( PEAK_MODE == "Histone" )
         """
-        macs2 callpeak -t $BAM_t -c $BAM_c -f BAMPE -n ${ID} -p ${params.macs2_histone_pvalue}
+        macs2 callpeak -t $BAM_t -c $BAM_c -f ${bamFormat} -n ${ID} -p ${params.macs2_histone_pvalue}
         """
     else
         """
-        macs2 callpeak -t $BAM_t -c $BAM_c -f BAMPE -n ${ID} -q ${params.macs2_tf_qvalue}
+        macs2 callpeak -t $BAM_t -c $BAM_c -f ${bamFormat} -n ${ID} -q ${params.macs2_tf_qvalue}
         """
 }
 
@@ -183,7 +184,7 @@ process MACS2_callpeaks_noCtrl {
     publishDir "$params.outdir/callpeaks", pattern: "*", mode: 'copy'
 
     input:
-    tuple val(ID), path(BAM_t), val(PEAK_MODE)
+    tuple val(ID), path(BAM_t), val(LAYOUT), val(PEAK_MODE)
 
     output:
     tuple val(ID), path("${ID}_peaks.xls"), emit: xls
@@ -191,8 +192,9 @@ process MACS2_callpeaks_noCtrl {
     tuple val(ID), path("${ID}_summits.bed"), emit: summits
 
     script:
+    def bamFormat = LAYOUT == 'PE' ? 'BAMPE' : 'BAM'
     """
-    macs2 callpeak -t $BAM_t -f BAMPE -n ${ID} --SPMR -q ${params.macs2_noctrl_qvalue} --keep-dup ${params.macs2_noctrl_keep_dup} --extsize=${params.macs2_noctrl_extsize} --nomodel -g hs
+    macs2 callpeak -t $BAM_t -f ${bamFormat} -n ${ID} --SPMR -q ${params.macs2_noctrl_qvalue} --keep-dup ${params.macs2_noctrl_keep_dup} --extsize=${params.macs2_noctrl_extsize} --nomodel -g hs
     """
 }
 
@@ -319,6 +321,13 @@ workflow {
             def r1 = normValue(row.R1)
             def r2 = normValue(row.R2)
             def layout = normValue(row.Layout ?: row.TYPE ?: row.Type).toUpperCase()
+            if ( !layout && input_mode == 'bam' ) {
+                layout = 'PE'
+                log.warn "Sample '${id}' has no Layout in BAM mode; defaulting to PE. Set Layout=SE for single-end BAM files."
+            }
+            if ( !(layout in ['PE', 'SE']) ) {
+                error "Invalid Layout '${layout}' for sample '${id}'. Use 'PE' or 'SE'."
+            }
             def bam = normValue(row.BAM ?: row.Bam ?: row.bam)
             def peakMode = normValue(row.PeakMode)
             def controlId = normValue(row.ControlID)
@@ -330,7 +339,7 @@ workflow {
     ch_peak_meta = ch_sheet
         .filter { id, r1, r2, layout, bam, peakMode, controlId, controlBam -> peakMode }
         .map { id, r1, r2, layout, bam, peakMode, controlId, controlBam ->
-            tuple(id, peakMode, controlId, controlBam)
+            tuple(id, layout, peakMode, controlId, controlBam)
         }
 
     def ch_bam_for_peak
@@ -353,28 +362,28 @@ workflow {
 
     ch_treat_with_meta = ch_peak_meta
         .join(ch_bam_for_peak, by: 0)
-        .map { id, peakMode, controlId, controlBam, bam ->
-            tuple(id, bam, peakMode, controlId, controlBam)
+        .map { id, layout, peakMode, controlId, controlBam, bam ->
+            tuple(id, bam, layout, peakMode, controlId, controlBam)
         }
 
     ch_control_bam = ch_bam_for_peak
 
     ch_peak_no_ctrl = ch_treat_with_meta
-        .filter { id, bam, peakMode, controlId, controlBam -> peakMode == 'NoCtr' || (!controlId && !controlBam) }
-        .map { id, bam, peakMode, controlId, controlBam -> tuple(id, bam, peakMode ?: 'NoCtr') }
+        .filter { id, bam, layout, peakMode, controlId, controlBam -> peakMode == 'NoCtr' || (!controlId && !controlBam) }
+        .map { id, bam, layout, peakMode, controlId, controlBam -> tuple(id, bam, layout, peakMode ?: 'NoCtr') }
 
     ch_peak_with_ctrl_by_id = ch_treat_with_meta
-        .filter { id, bam, peakMode, controlId, controlBam -> controlId && peakMode != 'NoCtr' }
+        .filter { id, bam, layout, peakMode, controlId, controlBam -> controlId && peakMode != 'NoCtr' }
         .combine(ch_control_bam)
-        .filter { id, bam_t, peakMode, controlId, controlBam, ctrlId, bam_c -> controlId == ctrlId }
-        .map { id, bam_t, peakMode, controlId, controlBam, ctrlId, bam_c ->
-            tuple(id, bam_t, bam_c, peakMode)
+        .filter { id, bam_t, layout, peakMode, controlId, controlBam, ctrlId, bam_c -> controlId == ctrlId }
+        .map { id, bam_t, layout, peakMode, controlId, controlBam, ctrlId, bam_c ->
+            tuple(id, bam_t, bam_c, layout, peakMode)
         }
 
     ch_peak_with_ctrl_by_bam = ch_treat_with_meta
-        .filter { id, bam, peakMode, controlId, controlBam -> !controlId && controlBam && peakMode != 'NoCtr' }
-        .map { id, bam, peakMode, controlId, controlBam ->
-            tuple(id, bam, file(controlBam), peakMode)
+        .filter { id, bam, layout, peakMode, controlId, controlBam -> !controlId && controlBam && peakMode != 'NoCtr' }
+        .map { id, bam, layout, peakMode, controlId, controlBam ->
+            tuple(id, bam, file(controlBam), layout, peakMode)
         }
 
     ch_peak_with_ctrl = ch_peak_with_ctrl_by_id.mix(ch_peak_with_ctrl_by_bam)

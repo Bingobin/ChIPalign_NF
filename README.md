@@ -41,7 +41,7 @@ FASTQ mode samplesheet columns:
 
 BAM mode samplesheet columns:
 
-`ID,BAM,PeakMode,ControlID,ControlBam`
+`ID,BAM,Layout,PeakMode,ControlID,ControlBam`
 
 Column definitions:
 
@@ -68,12 +68,12 @@ CUTRUN_1,/path/to/CUTRUN_1_R1.fastq.gz,/path/to/CUTRUN_1_R2.fastq.gz,PE,NoCtr,,
 BAM mode example:
 
 ```csv
-ID,BAM,PeakMode,ControlID,ControlBam
-Input_1,/path/to/Input_1.rmdup.bam,,,
-CTCF_1,/path/to/CTCF_1.rmdup.bam,TF,Input_1,
-H3K27ac_1,/path/to/H3K27ac_1.rmdup.bam,Histone,Input_1,
-CTCF_2,/path/to/CTCF_2.rmdup.bam,TF,,/path/to/Input_2.rmdup.bam
-CUTRUN_1,/path/to/CUTRUN_1.rmdup.bam,NoCtr,,
+ID,BAM,Layout,PeakMode,ControlID,ControlBam
+Input_1,/path/to/Input_1.rmdup.bam,SE,,,
+CTCF_1,/path/to/CTCF_1.rmdup.bam,SE,TF,Input_1,
+H3K27ac_1,/path/to/H3K27ac_1.rmdup.bam,PE,Histone,Input_1,
+CTCF_2,/path/to/CTCF_2.rmdup.bam,PE,TF,,/path/to/Input_2.rmdup.bam
+CUTRUN_1,/path/to/CUTRUN_1.rmdup.bam,PE,NoCtr,,
 ```
 
 Reference files in this repository:
@@ -85,6 +85,7 @@ Reference files in this repository:
 
 - `Layout` and `PeakMode` are different concepts and should not be merged into one column.
 - `Layout` only describes read structure: `SE` or `PE`.
+- MACS2 uses `-f BAM` for `SE` samples and `-f BAMPE` for `PE` samples. In BAM input mode, explicitly set `Layout`; legacy rows without it default to `PE` with a warning.
 - `PeakMode` only describes the peak-calling strategy.
 - Samples used only as controls should keep `PeakMode` empty. A blank `PeakMode` means the row is not a treatment sample and will be excluded from downstream peak calling.
 - If a treatment sample uses a control, `ControlID` must exactly match the control sample `ID`.
